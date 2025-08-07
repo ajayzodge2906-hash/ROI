@@ -35,23 +35,39 @@ def predict():
         gym = 1 if data.get('Gym') else 0
         garden = 1 if data.get('Garden') else 0
 
-        # Create input vector
-        input_data = pd.DataFrame([[
-            area, baths, parking, lift, security, gym, garden
-        ]], columns=FEATURES)
+        # === Step 1: Prepare static base features
+        base_data = {
+            'Total_Area': area,
+            'Baths': baths,
+            'Parking': parking,
+            'Lift': lift,
+            'Security': security,
+            'Gym': gym,
+            'Garden': garden
+        }
 
-        # Predict ROI %
-        roi_percent = roi_model.predict(input_data)[0]
+        # === Step 2: One-hot encode the location (dynamically)
+        all_columns = roi_model.feature_names_in_
+        input_dict = {col: 0 for col in all_columns}  # Fill all columns with 0
+        input_dict.update(base_data)
+
+        loc_col = f'Location_{location}'
+        if loc_col in input_dict:
+            input_dict[loc_col] = 1  # Set only the selected location to 1
+
+        # === Step 3: Convert to DataFrame
+        input_df = pd.DataFrame([input_dict])
+
+        # === Step 4: Predict ROI
+        roi_percent = roi_model.predict(input_df)[0]
         roi_percent = round(float(roi_percent), 2)
 
-        # Calculate rent and future price
-        estimated_annual_rent = round((roi_percent / 100) * area * 70, 2)  # Assume ₹70/sqft rent
+        estimated_annual_rent = round((roi_percent / 100) * area * 70, 2)
         total_rent_income = round(estimated_annual_rent * years, 2)
-        future_price = round(area * 4000 * (1 + roi_percent / 100), 2)  # Assume ₹4000/sqft base price
+        future_price = round(area * 4000 * (1 + roi_percent / 100), 2)
 
-        # Build response
+        # === Step 5: Build response
         response = {}
-
         if mode == "rent" or mode == "both":
             response["estimated_annual_rent"] = estimated_annual_rent
             response["total_rent_income"] = total_rent_income
@@ -71,5 +87,7 @@ def predict():
     except Exception as e:
         return jsonify({"error": str(e)})
 
+
 if __name__ == '__main__':
     app.run(debug=True)
+
