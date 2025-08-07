@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from flask_cors import cors
+from flask_cors import CORS
 import joblib
 import pandas as pd
 
@@ -59,3 +59,4 @@ def predict():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
