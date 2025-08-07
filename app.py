@@ -1,120 +1,75 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pickle
+import joblib
 import numpy as np
 import pandas as pd
 
 app = Flask(__name__)
 CORS(app)
 
-# Load models
-price_model = pickle.load(open("models/price_model.pkl", "rb"))
-rent_model = pickle.load(open("models/rent_model.pkl", "rb"))
+# Load the ROI model
+roi_model = joblib.load("roi_model.pkl")
 
-# Location encoder categories (manually extracted during training)
-location_categories = [
-    'Andheri East, Mumbai', 'Andheri West, Mumbai', 'Borivali, Mumbai',
-    'Bandra, Mumbai', 'Dadar, Mumbai', 'Goregaon, Mumbai',
-    'Juhu, Mumbai', 'Kandivali, Mumbai', 'Kurla, Mumbai', 'Malad, Mumbai',
-    'Mulund, Mumbai', 'Powai, Mumbai', 'Thane, Mumbai', 'Vile Parle, Mumbai'
-]
-
-# Function to encode location manually
-def encode_location(location):
-    encoded = [1 if loc == location else 0 for loc in location_categories]
-    return encoded
-
-# Function to calculate amenities score
-def calculate_amenities_score(data):
-    amenities = ['Parking', 'Lift', 'Security', 'Gym', 'Garden']
-    score = sum([1 for amenity in amenities if data.get(amenity, False)])
-    return score
+# Define the features used in model
+FEATURES = ['Total_Area', 'Baths', 'Parking', 'Lift', 'Security', 'Gym', 'Garden']
 
 @app.route('/')
 def home():
-    return jsonify({'message': '🏠 Real Estate ROI Predictor API is live!'})
+    return "🏡 Real Estate ROI Advisor API is Live!"
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    data = request.get_json()
+
     try:
-        data = request.get_json()
-        location = data['Location']
-        total_area = float(data['Total_Area'])
+        location = data.get('Location')
+        area = float(data.get('Total_Area'))
         baths = int(data.get('Baths', 2))
         years = int(data.get('Years', 5))
         mode = data.get('Mode', 'both').lower()
 
-        if location not in location_categories:
-            return jsonify({'error': f"Unsupported location: {location}"}), 400
+        # Amenities - default to False if not provided
+        parking = 1 if data.get('Parking') else 0
+        lift = 1 if data.get('Lift') else 0
+        security = 1 if data.get('Security') else 0
+        gym = 1 if data.get('Gym') else 0
+        garden = 1 if data.get('Garden') else 0
 
-        # Encode location
-        encoded_location = encode_location(location)
+        # Create input vector
+        input_data = pd.DataFrame([[
+            area, baths, parking, lift, security, gym, garden
+        ]], columns=FEATURES)
 
-        # Amenities score
-        amenities_score = calculate_amenities_score(data)
+        # Predict ROI %
+        roi_percent = roi_model.predict(input_data)[0]
+        roi_percent = round(float(roi_percent), 2)
 
-        # Final feature vector
-        features = [total_area, baths, amenities_score] + encoded_location
-        features_array = np.array(features).reshape(1, -1)
+        # Calculate rent and future price
+        estimated_annual_rent = round((roi_percent / 100) * area * 70, 2)  # Assume ₹70/sqft rent
+        total_rent_income = round(estimated_annual_rent * years, 2)
+        future_price = round(area * 4000 * (1 + roi_percent / 100), 2)  # Assume ₹4000/sqft base price
 
-        result = {'mode': mode}
+        # Build response
+        response = {}
 
-        # Common predictions
-        current_price = price_model.predict(features_array)[0]
-        estimated_annual_rent = rent_model.predict(features_array)[0]
-        total_rent_income = estimated_annual_rent * years
-        future_price = current_price * (1.06 ** years)  # 6% annual appreciation
+        if mode == "rent" or mode == "both":
+            response["estimated_annual_rent"] = estimated_annual_rent
+            response["total_rent_income"] = total_rent_income
 
-        # ROI calculation
-        roi = ((total_rent_income) / current_price) * 100
-        total_return = (future_price - current_price) + total_rent_income
-        roi_total = (total_return / current_price) * 100
+        if mode == "sell" or mode == "both":
+            response["future_price"] = future_price
 
-        # Handle modes
-        if mode == "rent":
-            result.update({
-                "estimated_annual_rent": round(estimated_annual_rent, 2),
-                "total_rent_income": round(total_rent_income, 2),
-                "roi_percent": round(roi, 2)
-            })
+        if mode == "buy":
+            response["future_price"] = future_price
+            response["estimated_annual_rent"] = estimated_annual_rent
+            response["total_rent_income"] = total_rent_income
+            response["profit_potential"] = round(future_price + total_rent_income, 2)
 
-        elif mode == "sell":
-            result.update({
-                "current_price": round(current_price, 2),
-                "future_price": round(future_price, 2)
-            })
-
-        elif mode == "rent_only":
-            result.update({
-                "estimated_annual_rent": round(estimated_annual_rent, 2)
-            })
-
-        elif mode == "buy":
-            result.update({
-                "current_price": round(current_price, 2),
-                "future_price": round(future_price, 2),
-                "estimated_annual_rent": round(estimated_annual_rent, 2),
-                "total_rent_income": round(total_rent_income, 2),
-                "total_return": round(total_return, 2),
-                "roi_percent": round(roi_total, 2)
-            })
-
-        elif mode == "both":
-            result.update({
-                "current_price": round(current_price, 2),
-                "future_price": round(future_price, 2),
-                "estimated_annual_rent": round(estimated_annual_rent, 2),
-                "total_rent_income": round(total_rent_income, 2),
-                "roi_percent": round(roi, 2)
-            })
-
-        else:
-            return jsonify({"error": f"Invalid mode: {mode}. Choose from rent, sell, both, rent_only, buy."}), 400
-
-        return jsonify(result)
+        response["roi_percent"] = roi_percent
+        return jsonify(response)
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e)})
 
 if __name__ == '__main__':
     app.run(debug=True)
