@@ -8,7 +8,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Load the ROI model
-roi_model = joblib.load("roi_model.pkl")
+roi_model = joblib.load("models/roi_model.pkl")
 
 # Define the features used in model
 FEATURES = ['Total_Area', 'Baths', 'Parking', 'Lift', 'Security', 'Gym', 'Garden']
@@ -90,4 +90,5 @@ def predict():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
