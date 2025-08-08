@@ -7,6 +7,11 @@ import numpy as np
 app = Flask(__name__)
 CORS(app)
 
+roi_model = pickle.load(open('roi_model.pkl', 'rb'))
+price_model = pickle.load(open('price_model.pkl', 'rb'))
+rent_model = pickle.load(open('rent_model.pkl', 'rb'))
+future_model = pickle.load(open('future_model.pkl', 'rb'))
+
 @app.route('/')
 def home():
     return jsonify({'message': 'Real Estate ROI Advisor API is running ✅'})
@@ -90,3 +95,4 @@ def predict_future_price():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
