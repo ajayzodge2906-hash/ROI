@@ -1,86 +1,82 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import pickle
 import numpy as np
-from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app)  # Enable Cross-Origin Resource Sharing
 
-# Load models
-roi_model = pickle.load(open('models/roi_model.pkl', 'rb'))
-price_model = pickle.load(open('models/price_model.pkl', 'rb'))
-rent_model = pickle.load(open('models/rent_model.pkl', 'rb'))
-current_price_model = pickle.load(open('models/current_price_model.pkl', 'rb'))
+# ----------- Load local models ----------- #
+with open('roi_model.pkl', 'rb') as f:
+    roi_model = pickle.load(f)
 
+with open('price_model.pkl', 'rb') as f:
+    price_model = pickle.load(f)
+
+with open('rent_model.pkl', 'rb') as f:
+    rent_model = pickle.load(f)
+
+with open('future_model.pkl', 'rb') as f:
+    future_model = pickle.load(f)
+
+# ----------- Prediction Route ----------- #
+@app.route('/predict', methods=['POST'])
+def predict():
+    data = request.get_json()
+    mode = data.get('mode', 'roi')
+
+    try:
+        if mode == 'roi':
+            features = [
+                float(data['Price']),
+                float(data['Rent']),
+                float(data['Maintenance']),
+                float(data['Tax']),
+                float(data['Misc']),
+                float(data['Total_Area']),
+                int(data['Bedrooms']),
+                float(data['Location_Score'])
+            ]
+            model = roi_model
+
+        elif mode == 'price':
+            features = [
+                float(data['Total_Area']),
+                int(data['Bedrooms']),
+                float(data['Location_Score'])
+            ]
+            model = price_model
+
+        elif mode == 'rent':
+            features = [
+                float(data['Price']),
+                float(data['Total_Area']),
+                int(data['Bedrooms']),
+                float(data['Location_Score'])
+            ]
+            model = rent_model
+
+        elif mode == 'future':
+            features = [
+                float(data['Price']),
+                float(data['Location_Score'])
+            ]
+            model = future_model
+
+        else:
+            return jsonify({'error': 'Invalid prediction mode'}), 400
+
+        prediction = model.predict([features])[0]
+        return jsonify({'prediction': round(prediction, 2)})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ----------- Home Route ----------- #
 @app.route('/')
 def home():
-    return "🏠 Real Estate ROI Advisor API is running."
+    return '🏠 Real Estate ROI Advisor API is up and running!'
 
-@app.route('/predict_roi', methods=['POST'])
-def predict_roi():
-    data = request.get_json()
-    try:
-        features = np.array([
-            data['price'],
-            data['rent'],
-            data['maintenance'],
-            data['tax'],
-            data['misc']
-        ]).reshape(1, -1)
-
-        prediction = roi_model.predict(features)[0]
-        return jsonify({'roi_prediction': round(prediction, 2)})
-
-    except Exception as e:
-        return jsonify({'error': str(e)})
-
-@app.route('/predict_price', methods=['POST'])
-def predict_price():
-    data = request.get_json()
-    try:
-        features = np.array([
-            data['area_sqft'],
-            data['bedrooms'],
-            data['location_score']
-        ]).reshape(1, -1)
-
-        prediction = price_model.predict(features)[0]
-        return jsonify({'price_prediction': round(prediction, 2)})
-
-    except Exception as e:
-        return jsonify({'error': str(e)})
-
-@app.route('/predict_rent', methods=['POST'])
-def predict_rent():
-    data = request.get_json()
-    try:
-        features = np.array([
-            data['area_sqft'],
-            data['bedrooms'],
-            data['location_score']
-        ]).reshape(1, -1)
-
-        prediction = rent_model.predict(features)[0]
-        return jsonify({'rent_prediction': round(prediction, 2)})
-
-    except Exception as e:
-        return jsonify({'error': str(e)})
-
-@app.route('/predict_current_price', methods=['POST'])
-def predict_current_price():
-    data = request.get_json()
-    try:
-        features = np.array([
-            data['area_sqft'],
-            data['bedrooms'],
-            data['location_score']
-        ]).reshape(1, -1)
-
-        prediction = current_price_model.predict(features)[0]
-        return jsonify({'current_price_prediction': round(prediction, 2)})
-
-    except Exception as e:
-        return jsonify({'error': str(e)})
-
+# ----------- Run Flask App ----------- #
 if __name__ == '__main__':
     app.run(debug=True)
