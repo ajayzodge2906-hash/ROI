@@ -4,79 +4,54 @@ import pickle
 import numpy as np
 
 app = Flask(__name__)
-CORS(app)  # Enable Cross-Origin Resource Sharing
+CORS(app)
 
-# ----------- Load local models ----------- #
-with open('roi_model.pkl', 'rb') as f:
-    roi_model = pickle.load(f)
+# Load models (must be in the same directory on Render)
+roi_model = pickle.load(open('roi_model.pkl', 'rb'))
+price_model = pickle.load(open('price_model.pkl', 'rb'))
+rent_model = pickle.load(open('rent_model.pkl', 'rb'))
+future_model = pickle.load(open('future_model.pkl', 'rb'))
 
-with open('price_model.pkl', 'rb') as f:
-    price_model = pickle.load(f)
-
-with open('rent_model.pkl', 'rb') as f:
-    rent_model = pickle.load(f)
-
-with open('future_model.pkl', 'rb') as f:
-    future_model = pickle.load(f)
-
-# ----------- Prediction Route ----------- #
 @app.route('/predict', methods=['POST'])
-def predict():
-    data = request.get_json()
-    mode = data.get('mode', 'roi')
+def predict_roi():
+    data = request.json
+    features = np.array([
+        data['price'], data['rent'], data['area'], data['bathrooms'],
+        data['maintenance'], data['tax'], data['misc'], data['location_score']
+    ]).reshape(1, -1)
 
-    try:
-        if mode == 'roi':
-            features = [
-                float(data['Price']),
-                float(data['Rent']),
-                float(data['Maintenance']),
-                float(data['Tax']),
-                float(data['Misc']),
-                float(data['Total_Area']),
-                int(data['Bedrooms']),
-                float(data['Location_Score'])
-            ]
-            model = roi_model
+    prediction = roi_model.predict(features)[0]
+    return jsonify({'roi_prediction': round(prediction, 2)})
 
-        elif mode == 'price':
-            features = [
-                float(data['Total_Area']),
-                int(data['Bedrooms']),
-                float(data['Location_Score'])
-            ]
-            model = price_model
+@app.route('/predict/price', methods=['POST'])
+def predict_price():
+    data = request.json
+    features = np.array([
+        data['area'], data['bathrooms'], data['location_score']
+    ]).reshape(1, -1)
 
-        elif mode == 'rent':
-            features = [
-                float(data['Price']),
-                float(data['Total_Area']),
-                int(data['Bedrooms']),
-                float(data['Location_Score'])
-            ]
-            model = rent_model
+    price = price_model.predict(features)[0]
+    return jsonify({'estimated_price': round(price, 2)})
 
-        elif mode == 'future':
-            features = [
-                float(data['Price']),
-                float(data['Location_Score'])
-            ]
-            model = future_model
+@app.route('/predict/rent', methods=['POST'])
+def predict_rent():
+    data = request.json
+    features = np.array([
+        data['price'], data['location_score'], data['area']
+    ]).reshape(1, -1)
 
-        else:
-            return jsonify({'error': 'Invalid prediction mode'}), 400
+    rent = rent_model.predict(features)[0]
+    return jsonify({'estimated_rent': round(rent, 2)})
 
-        prediction = model.predict([features])[0]
-        return jsonify({'prediction': round(prediction, 2)})
+@app.route('/predict/future', methods=['POST'])
+def predict_future_price():
+    data = request.json
+    features = np.array([
+        data['price'], data['location_score']
+    ]).reshape(1, -1)
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    future_price = future_model.predict(features)[0]
+    return jsonify({'future_price': round(future_price, 2)})
 
-# ----------- Home Route ----------- #
-@app.route('/')
-def home():
-    return '🏠 Real Estate ROI Advisor API is up and running!'
-
-# ----------- Run Flask App ----------- #
 if __name__ == '__main__':
     app.run(debug=True)
