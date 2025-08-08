@@ -12,7 +12,7 @@ model_dir = "models"
 roi_model = joblib.load(os.path.join(model_dir, "roi_model.pkl"))
 price_model = joblib.load(os.path.join(model_dir, "price_model.pkl"))
 rent_model = joblib.load(os.path.join(model_dir, "rent_model.pkl"))
-future_model = joblib.load(os.path.join(model_dir, "future_price_model.pkl"))
+future_model = joblib.load(os.path.join(model_dir, "future_model.pkl"))
 
 @app.route('/')
 def home():
@@ -103,3 +103,4 @@ def predict_future_price():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
